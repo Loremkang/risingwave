@@ -203,10 +203,11 @@ pub struct StorageConfig {
 
     #[serde(default = "default::object_store_use_batch_delete")]
     pub object_store_use_batch_delete: bool,
-
     /// Whether to enable state_store_v1 for hummock
     #[serde(default = "default::enable_state_store_v1")]
     pub enable_state_store_v1: bool,
+    #[serde(default = "default::share_buffer_split_compaction_group_enabled")]
+    pub share_buffer_split_compaction_group_enabled: bool,
 }
 
 impl Default for StorageConfig {
@@ -416,6 +417,9 @@ mod default {
     }
     pub fn enable_state_store_v1() -> bool {
         false
+    }
+    pub fn share_buffer_split_compaction_group_enabled() -> bool {
+        true
     }
 
     pub mod developer {
