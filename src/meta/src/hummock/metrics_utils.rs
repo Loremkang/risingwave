@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::Ordering;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -34,6 +34,35 @@ pub fn trigger_version_stat(metrics: &MetaMetrics, current_version: &HummockVers
         .set(current_version.encoded_len() as i64);
     metrics.safe_epoch.set(current_version.safe_epoch as i64);
     metrics.current_version_id.set(current_version.id as i64);
+
+    // Update table stats
+    let mut table_file_size: HashMap<u32, u64> = HashMap::new();
+    let mut table_total_key_count: HashMap<u32, u64> = HashMap::new();
+    let mut table_stale_key_count: HashMap<u32, u64> = HashMap::new();
+    for (_, group_levels) in current_version.levels.iter() {
+        if let Some(l0) = group_levels.l0.as_ref() {
+            for level in l0.sub_levels.iter() {
+                for sst in level.table_infos.iter() {
+                    let avg_file_size_in_sst = sst.file_size / sst.table_ids.len() as u64;
+                    let avg_total_key_count_in_sst = sst.total_key_count / sst.table_ids.len() as u64;
+                    let avg_stale_key_count_in_sst = sst.stale_key_count / sst.table_ids.len() as u64;
+                    for table_id in sst.table_ids.iter() {
+                        *table_file_size.entry(*table_id).or_insert(0) += avg_file_size_in_sst;
+                        *table_total_key_count.entry(*table_id).or_insert(0) +=
+                            avg_total_key_count_in_sst;
+                        *table_stale_key_count.entry(*table_id).or_insert(0) +=
+                            avg_stale_key_count_in_sst;
+                    }
+                }
+            }
+        }
+    }
+    for (table_id, stat) in table_file_size {
+        metrics
+            .table_stats
+            .with_label_values(&[&table_id.to_string(), &stat.to_string()])
+            .set(stat as f64);
+    }
 }
 
 pub fn trigger_sst_stat(

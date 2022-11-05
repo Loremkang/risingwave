@@ -15,10 +15,11 @@
 use std::sync::atomic::AtomicU64;
 
 use prometheus::{
-    exponential_buckets, histogram_opts, register_histogram_vec_with_registry,
-    register_histogram_with_registry, register_int_counter_vec_with_registry,
-    register_int_gauge_vec_with_registry, register_int_gauge_with_registry, Histogram,
-    HistogramVec, IntCounterVec, IntGauge, IntGaugeVec, Registry,
+    exponential_buckets, histogram_opts, register_gauge_vec_with_registry,
+    register_histogram_vec_with_registry, register_histogram_with_registry,
+    register_int_counter_vec_with_registry, register_int_gauge_vec_with_registry,
+    register_int_gauge_with_registry, GaugeVec, Histogram, HistogramVec, IntCounterVec, IntGauge,
+    IntGaugeVec, Registry,
 };
 
 pub struct MetaMetrics {
@@ -62,6 +63,8 @@ pub struct MetaMetrics {
     pub checkpoint_version_id: IntGauge,
     /// The smallest version id that is being pinned.
     pub min_pinned_version_id: IntGauge,
+    /// Table stats
+    pub table_stats: GaugeVec,
 
     /// Latency for hummock manager to acquire lock
     pub hummock_manager_lock_time: HistogramVec,
@@ -188,6 +191,14 @@ impl MetaMetrics {
         )
         .unwrap();
 
+        let table_stats = register_gauge_vec_with_registry!(
+            "table_stats",
+            "table statistics",
+            &["table_id", "stat_type"],
+            registry
+        )
+        .unwrap();
+
         let level_file_size = register_int_gauge_vec_with_registry!(
             "storage_level_total_file_size",
             "KBs total file bytes in each level",
@@ -241,6 +252,7 @@ impl MetaMetrics {
             current_version_id,
             checkpoint_version_id,
             min_pinned_version_id,
+            table_stats,
             hummock_manager_lock_time,
             hummock_manager_real_process_time,
             time_after_last_observation: AtomicU64::new(0),

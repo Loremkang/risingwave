@@ -19,6 +19,7 @@ data_directory = "hummock_001"
 block_cache_capacity_mb = 4096
 meta_cache_capacity_mb = 1024
 compactor_memory_limit_mb = 5120
+share_buffer_split_compaction_group_enabled = false
 
 [storage.file_cache]
 capacity_mb = 1024
