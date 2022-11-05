@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::iter;
 use std::sync::Arc;
 
 use itertools::Itertools;
@@ -115,19 +116,9 @@ impl<S: MetaStore> CompactionGroupManager<S> {
             == Some(true);
         let table_option = TableOption::build_table_option(table_properties);
         let mut pairs = vec![];
-        // materialized_view or materialized_source
-        pairs.push((
-            table_fragments.table_id().table_id,
-            if is_independent_compaction_group {
-                CompactionGroupId::from(StaticCompactionGroupId::NewCompactionGroup)
-            } else {
-                CompactionGroupId::from(StaticCompactionGroupId::MaterializedView)
-            },
-            table_option,
-        ));
-        // internal states
-        for table_id in table_fragments.internal_table_ids() {
-            assert_ne!(table_id, table_fragments.table_id().table_id);
+        for table_id in iter::once(table_fragments.table_id().table_id)
+            .chain(table_fragments.internal_table_ids().into_iter())
+        {
             pairs.push((
                 table_id,
                 if is_independent_compaction_group {
