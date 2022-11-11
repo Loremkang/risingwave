@@ -395,13 +395,12 @@ impl<K: HashKey, S: StateStore> HashAggExecutor<K, S> {
             ref total_lookup_count,
             ref metrics,
             ref chunk_size,
-            buffered_watermarks: ref _buffered_watermarks,
+            ref buffered_watermarks,
             ..
         }: &'a mut HashAggExecutorExtra<K, S>,
         agg_groups: &'a mut AggGroupMap<K, S>,
         epoch: EpochPair,
     ) {
-        // TODO("https://github.com/risingwavelabs/risingwave/issues/6112"): use buffered_watermarks[0] do some state cleaning
         let actor_id_str = ctx.id.to_string();
         metrics
             .agg_lookup_miss_count
@@ -481,12 +480,17 @@ impl<K: HashKey, S: StateStore> HashAggExecutor<K, S> {
                 yield chunk;
             }
 
+            let state_clean_watermark = buffered_watermarks
+                .first()
+                .and_then(|opt_watermark| opt_watermark.as_ref().map(|watermark| &watermark.val));
+
             // Commit all state tables.
             futures::future::try_join_all(
-                iter_table_storage(storages).map(|state_table| state_table.commit(epoch)),
+                iter_table_storage(storages)
+                    .map(|state_table| state_table.commit(epoch, state_clean_watermark)),
             )
             .await?;
-            result_table.commit(epoch).await?;
+            result_table.commit(epoch, state_clean_watermark).await?;
 
             // Evict cache to target capacity.
             agg_groups.evict();

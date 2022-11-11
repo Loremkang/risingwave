@@ -390,7 +390,7 @@ impl<S: StateStore> DynamicFilterExecutor<S> {
                                 self.right_table.insert(row.clone());
                                 last_committed_epoch_row = Some(row.clone());
                             }
-                            self.right_table.commit(barrier.epoch).await?;
+                            self.right_table.commit(barrier.epoch, None).await?;
                         } else {
                             self.right_table.commit_no_data_expected(barrier.epoch);
                         }

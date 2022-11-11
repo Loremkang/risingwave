@@ -27,7 +27,7 @@ use itertools::{izip, Itertools};
 use risingwave_common::array::{Op, Row, RowDeserializer, StreamChunk, Vis};
 use risingwave_common::buffer::Bitmap;
 use risingwave_common::catalog::{ColumnDesc, TableId, TableOption};
-use risingwave_common::types::VirtualNode;
+use risingwave_common::types::{ScalarImpl, VirtualNode};
 use risingwave_common::util::epoch::EpochPair;
 use risingwave_common::util::ordered::OrderedRowSerde;
 use risingwave_common::util::sort_util::OrderType;
@@ -583,18 +583,25 @@ impl<S: StateStore> StateTable<S> {
         self.epoch = Some(new_epoch);
     }
 
-    pub async fn commit(&mut self, new_epoch: EpochPair) -> StorageResult<()> {
+    pub async fn commit(
+        &mut self,
+        new_epoch: EpochPair,
+        watermark: Option<&ScalarImpl>,
+    ) -> StorageResult<()> {
         assert_eq!(self.epoch(), new_epoch.prev);
         let mem_table = std::mem::take(&mut self.mem_table).into_parts();
-        self.batch_write_rows(mem_table, new_epoch.prev).await?;
+        self.batch_write_rows(mem_table, new_epoch.prev, watermark)
+            .await?;
         self.update_epoch(new_epoch);
         Ok(())
     }
 
     /// used for unit test, and do not need to assert epoch.
+    #[cfg(any(test, feature = "test"))]
     pub async fn commit_for_test(&mut self, new_epoch: EpochPair) -> StorageResult<()> {
         let mem_table = std::mem::take(&mut self.mem_table).into_parts();
-        self.batch_write_rows(mem_table, new_epoch.prev).await?;
+        self.batch_write_rows(mem_table, new_epoch.prev, None)
+            .await?;
         self.update_epoch(new_epoch);
         Ok(())
     }
@@ -612,6 +619,7 @@ impl<S: StateStore> StateTable<S> {
         &mut self,
         buffer: BTreeMap<Vec<u8>, RowOp>,
         epoch: u64,
+        watermark: Option<&ScalarImpl>,
     ) -> StorageResult<()> {
         let mut write_batch = self.keyspace.start_write_batch(WriteOptions {
             epoch,
@@ -641,6 +649,17 @@ impl<S: StateStore> StateTable<S> {
                     }
                     write_batch.put(pk, StorageValue::new_put(new_row));
                 }
+            }
+        }
+        if let Some(watermark) = watermark {
+            let prefix_serializer = self.pk_serde.prefix(1);
+            let encoded_prefix =
+                serialize_pk(&Row::new(vec![Some(watermark.clone())]), &prefix_serializer);
+            for vnode in self.vnodes.ones() {
+                let vnode_bytes = vnode.to_be_bytes().to_vec();
+                let mut range_end = vnode_bytes.clone();
+                range_end.extend(&encoded_prefix);
+                write_batch.delete_range(vnode_bytes, range_end);
             }
         }
         write_batch.ingest().await?;
