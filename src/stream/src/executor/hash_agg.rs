@@ -25,6 +25,7 @@ use risingwave_common::array::{Row, StreamChunk};
 use risingwave_common::buffer::Bitmap;
 use risingwave_common::catalog::Schema;
 use risingwave_common::hash::{HashCode, HashKey, PrecomputedBuildHasher};
+use risingwave_common::types::ScalarImpl;
 use risingwave_common::util::epoch::EpochPair;
 use risingwave_common::util::hash_util::Crc32FastBuilder;
 use risingwave_storage::table::streaming_table::state_table::StateTable;
@@ -124,6 +125,9 @@ struct HashAggExecutorExtra<K: HashKey, S: StateStore> {
 
     /// Buffer watermarks on group keys received since last barrier.
     buffered_watermarks: Vec<Option<Watermark>>,
+
+    /// If the latest watermark has not been used to do state cleaning, we should record it.
+    watermark_to_state_clean: Option<ScalarImpl>,
 }
 
 impl<K: HashKey, S: StateStore> Executor for HashAggExecutor<K, S> {
@@ -192,6 +196,7 @@ impl<K: HashKey, S: StateStore> HashAggExecutor<K, S> {
                 chunk_size,
                 group_key_invert_idx,
                 buffered_watermarks: Vec::default(),
+                watermark_to_state_clean: None,
             },
             _phantom: PhantomData,
         })
@@ -396,11 +401,18 @@ impl<K: HashKey, S: StateStore> HashAggExecutor<K, S> {
             ref metrics,
             ref chunk_size,
             ref buffered_watermarks,
+            ref mut watermark_to_state_clean,
             ..
         }: &'a mut HashAggExecutorExtra<K, S>,
         agg_groups: &'a mut AggGroupMap<K, S>,
         epoch: EpochPair,
     ) {
+        if let Some(first_group_key_watermark) = buffered_watermarks
+            .first()
+            .and_then(|opt_watermark| opt_watermark.as_ref())
+        {
+            *watermark_to_state_clean = Some(first_group_key_watermark.val.clone());
+        }
         let actor_id_str = ctx.id.to_string();
         metrics
             .agg_lookup_miss_count
@@ -480,17 +492,17 @@ impl<K: HashKey, S: StateStore> HashAggExecutor<K, S> {
                 yield chunk;
             }
 
-            let state_clean_watermark = buffered_watermarks
-                .first()
-                .and_then(|opt_watermark| opt_watermark.as_ref().map(|watermark| &watermark.val));
+            let state_clean_watermark = watermark_to_state_clean.take();
 
             // Commit all state tables.
             futures::future::try_join_all(
                 iter_table_storage(storages)
-                    .map(|state_table| state_table.commit(epoch, state_clean_watermark)),
+                    .map(|state_table| state_table.commit(epoch, state_clean_watermark.as_ref())),
             )
             .await?;
-            result_table.commit(epoch, state_clean_watermark).await?;
+            result_table
+                .commit(epoch, state_clean_watermark.as_ref())
+                .await?;
 
             // Evict cache to target capacity.
             agg_groups.evict();

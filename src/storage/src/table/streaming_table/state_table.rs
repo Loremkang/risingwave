@@ -100,6 +100,9 @@ pub struct StateTable<S: StateStore> {
 
     /// the epoch flush to the state store last time
     epoch: Option<EpochPair>,
+
+    /// last watermark that is used to construct delete ranges in `ingest`
+    last_watermark: Option<ScalarImpl>,
 }
 
 // initialize
@@ -213,6 +216,7 @@ impl<S: StateStore> StateTable<S> {
             vnode_col_idx_in_pk,
             value_indices,
             epoch: None,
+            last_watermark: None,
         }
     }
 
@@ -313,6 +317,7 @@ impl<S: StateStore> StateTable<S> {
             vnode_col_idx_in_pk: None,
             value_indices: Some(value_indices),
             epoch: None,
+            last_watermark: None,
         }
     }
 
@@ -451,6 +456,8 @@ impl<S: StateStore> StateTable<S> {
             );
         }
         assert_eq!(self.vnodes.len(), new_vnodes.len());
+
+        self.last_watermark = None;
 
         std::mem::replace(&mut self.vnodes, new_vnodes)
     }
@@ -597,7 +604,6 @@ impl<S: StateStore> StateTable<S> {
     }
 
     /// used for unit test, and do not need to assert epoch.
-    #[cfg(any(test, feature = "test"))]
     pub async fn commit_for_test(&mut self, new_epoch: EpochPair) -> StorageResult<()> {
         let mem_table = std::mem::take(&mut self.mem_table).into_parts();
         self.batch_write_rows(mem_table, new_epoch.prev, None)
@@ -653,16 +659,28 @@ impl<S: StateStore> StateTable<S> {
         }
         if let Some(watermark) = watermark {
             let prefix_serializer = self.pk_serde.prefix(1);
-            let encoded_prefix =
+            let range_end_suffix =
                 serialize_pk(&Row::new(vec![Some(watermark.clone())]), &prefix_serializer);
+            let range_begin_suffix = if let Some(ref last_watermark) = self.last_watermark {
+                serialize_pk(
+                    &Row::new(vec![Some(last_watermark.clone())]),
+                    &prefix_serializer,
+                )
+            } else {
+                vec![]
+            };
             for vnode in self.vnodes.ones() {
-                let vnode_bytes = vnode.to_be_bytes().to_vec();
-                let mut range_end = vnode_bytes.clone();
-                range_end.extend(&encoded_prefix);
-                write_batch.delete_range(vnode_bytes, range_end);
+                let mut range_begin = vnode.to_be_bytes().to_vec();
+                let mut range_end = range_begin.clone();
+                range_begin.extend(&range_begin_suffix);
+                range_end.extend(&range_end_suffix);
+                write_batch.delete_range(range_begin, range_end);
             }
         }
         write_batch.ingest().await?;
+        if let Some(watermark) = watermark {
+            self.last_watermark = Some(watermark.clone());
+        }
         Ok(())
     }
 
