@@ -95,6 +95,7 @@ pub struct MetaOpts {
     pub periodic_compaction_interval_sec: u64,
     /// Interval of reporting the number of nodes in the cluster.
     pub node_num_monitor_interval_sec: u64,
+    pub is_independent_compaction_group: bool,
 }
 
 impl Default for MetaOpts {
@@ -113,6 +114,7 @@ impl Default for MetaOpts {
             enable_committed_sst_sanity_check: false,
             periodic_compaction_interval_sec: 60,
             node_num_monitor_interval_sec: 10,
+            is_independent_compaction_group: false,
         }
     }
 }
@@ -196,6 +198,10 @@ where
 
     pub fn get_leader_info(&self) -> MetaLeaderInfo {
         self.info.clone()
+    }
+
+    pub fn is_independent_compaction_group(&self) -> bool {
+        false
     }
 }
 

@@ -271,6 +271,7 @@ risedev:
       # components.
       id: meta-node-0
       min-sst-retention-time-sec: 0
+      is-independent-compaction-group: true
 
       # Advertise address can be `id`, so as to use docker's DNS. If running
       # in host network mode, we should use IP directly in this field.
@@ -620,6 +621,8 @@ template:
 
     # Enable sanity check when SSTs are committed. Disabled by default.
     enable-committed-sst-sanity-check: false
+
+    is-independent-compaction-group: false
 
   prometheus:
     # Advertise address of Prometheus

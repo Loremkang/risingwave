@@ -104,6 +104,10 @@ impl MetaNodeService {
             cmd.arg("--enable-committed-sst-sanity-check");
         }
 
+        if config.is_independent_compaction_group {
+            cmd.arg("--is-independent-compaction-group");
+        }
+
         Ok(())
     }
 }

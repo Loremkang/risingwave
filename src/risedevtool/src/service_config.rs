@@ -69,6 +69,7 @@ pub struct MetaNodeConfig {
     pub enable_committed_sst_sanity_check: bool,
     pub periodic_compaction_interval_sec: u64,
     pub enable_compaction_deterministic: bool,
+    pub is_independent_compaction_group: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

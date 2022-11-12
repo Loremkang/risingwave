@@ -110,10 +110,11 @@ impl<S: MetaStore> CompactionGroupManager<S> {
         table_fragments: &TableFragments,
         table_properties: &HashMap<String, String>,
     ) -> Result<Vec<StateTableId>> {
-        let is_independent_compaction_group = table_properties
-            .get("independent_compaction_group")
-            .map(|s| s == "1")
-            == Some(true);
+        let is_independent_compaction_group = self.env.opts.is_independent_compaction_group
+            || table_properties
+                .get("independent_compaction_group")
+                .map(|s| s == "1")
+                == Some(true);
         let table_option = TableOption::build_table_option(table_properties);
         let mut pairs = vec![];
         for table_id in iter::once(table_fragments.table_id().table_id)

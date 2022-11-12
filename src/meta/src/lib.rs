@@ -150,6 +150,9 @@ pub struct MetaNodeOpts {
 
     #[clap(long, default_value = "10")]
     node_num_monitor_interval_sec: u64,
+
+    #[clap(long)]
+    is_independent_compaction_group: bool,
 }
 
 use std::future::Future;
@@ -164,11 +167,7 @@ pub fn start(opts: MetaNodeOpts) -> Pin<Box<dyn Future<Output = ()> + Send>> {
     Box::pin(async move {
         let meta_config: MetaNodeConfig = load_config(&opts.config_path).unwrap();
         tracing::info!("Starting meta node with config {:?}", meta_config);
-        tracing::info!(
-            "Starting meta node with options periodic_compaction_interval_sec: {}, enable_compaction_deterministic: {}",
-            opts.periodic_compaction_interval_sec,
-            opts.enable_compaction_deterministic
-        );
+        tracing::info!("options: {:#?}", opts);
         let meta_addr = opts.host.unwrap_or_else(|| opts.listen_addr.clone());
         let listen_addr = opts.listen_addr.parse().unwrap();
         let dashboard_addr = opts.dashboard_host.map(|x| x.parse().unwrap());
@@ -222,6 +221,7 @@ pub fn start(opts: MetaNodeOpts) -> Pin<Box<dyn Future<Output = ()> + Send>> {
                 enable_committed_sst_sanity_check: opts.enable_committed_sst_sanity_check,
                 periodic_compaction_interval_sec: opts.periodic_compaction_interval_sec,
                 node_num_monitor_interval_sec: opts.node_num_monitor_interval_sec,
+                is_independent_compaction_group: opts.is_independent_compaction_group,
             },
         )
         .await

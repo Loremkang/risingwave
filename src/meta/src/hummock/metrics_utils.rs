@@ -44,8 +44,10 @@ pub fn trigger_version_stat(metrics: &MetaMetrics, current_version: &HummockVers
             for level in l0.sub_levels.iter() {
                 for sst in level.table_infos.iter() {
                     let avg_file_size_in_sst = sst.file_size / sst.table_ids.len() as u64;
-                    let avg_total_key_count_in_sst = sst.total_key_count / sst.table_ids.len() as u64;
-                    let avg_stale_key_count_in_sst = sst.stale_key_count / sst.table_ids.len() as u64;
+                    let avg_total_key_count_in_sst =
+                        sst.total_key_count / sst.table_ids.len() as u64;
+                    let avg_stale_key_count_in_sst =
+                        sst.stale_key_count / sst.table_ids.len() as u64;
                     for table_id in sst.table_ids.iter() {
                         *table_file_size.entry(*table_id).or_insert(0) += avg_file_size_in_sst;
                         *table_total_key_count.entry(*table_id).or_insert(0) +=
