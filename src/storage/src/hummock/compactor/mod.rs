@@ -645,20 +645,8 @@ impl Compactor {
             self.context.stats.compact_sst_duration.start_timer()
         };
 
-        let split_table_outputs = if self.options.capacity as u64
-            > self.context.options.min_sst_size_for_streaming_upload
-        {
-            self.compact_key_range_impl(
-                StreamingSstableWriterFactory::new(self.context.sstable_store.clone()),
-                iter,
-                compaction_filter,
-                del_agg,
-                filter_key_extractor,
-                task_progress.clone(),
-            )
-            .await?
-        } else {
-            self.compact_key_range_impl(
+        let split_table_outputs = self
+            .compact_key_range_impl(
                 BatchSstableWriterFactory::new(self.context.sstable_store.clone()),
                 iter,
                 compaction_filter,
@@ -666,8 +654,7 @@ impl Compactor {
                 filter_key_extractor,
                 task_progress.clone(),
             )
-            .await?
-        };
+            .await?;
 
         compact_timer.observe_duration();
 
